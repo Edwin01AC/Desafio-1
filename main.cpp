@@ -1,56 +1,48 @@
 #include <iostream>
 #include <fstream>
-#include <string>
+#include <Qstring>
 
 using namespace std;
-void DesHacerXOR(const unsigned char BloqueEnmascarado[3], const unsigned char Clave[3], unsigned char Original[3]);
+
+void AplicarXOR(unsigned char* imagen, unsigned char* IM, int size);
 unsigned int *CargarSemilla(const char *NombreArchivo, int &Semilla, int &N_Pixeles);
+void CargarPixels(QString input, int &width, int &height);
 
 int main()
 {
-    //Se lee la semilla y los datos enmascarados
-    int Semilla = 0, N_Pixeles = 0;
-    unsigned int *DatosEnmascarados = CargarSemilla("M1.txt", Semilla, N_Pixeles);
-    if (!DatosEnmascarados) return 1;
+    //Cargar la imagen transformada final (Io)
+    int Width, Height;
+    unsigned char *Io = CargarPixels("P3.bmp", Width, Height);
+    if (!Io) return 1;
 
-    //Se construye una clave de 3 bits a partir de la semilla
-    unsigned char Clave[3];
-    Clave[0] = Semilla          & 0xFF;
-    Clave[1] = (Semilla >> 8)   & 0xFF;
-    Clave[2] = (Semilla >> 16)  & 0xFF;
+    //Cargar la imagen de distorción (IM)
+    int Width_IM, Height_IM;
+    unsigned char *IM = CargarPixels("IM.bmp", Width_IM, Height_IM);
 
-    //Implementación de la memoria dinamica, la cual almacena los datos recuperados
-    unsigned char *DatosRecuperados = new unsigned char[N_Pixeles * 3];
-
-    for (int i = 0; i < N_Pixeles; ++i) {
-        unsigned char Bloque[3], Original[3];
-
-        //Obetenmos cada bloque de bits
-        Bloque[0] = DatosEnmascarados[i*3];
-        Bloque[1] = DatosEnmascarados[i*3 + 1];
-        Bloque[2] = DatosEnmascarados[i*3 + 2];
-
-        //Deshace el XOR aplicado en el enmascaramiento
-        DesHacerXOR(Bloque, Clave, Original);
-
-        //Guardamos los datos recuperados
-        DatosRecuperados[i*3]     = Original[0];
-        DatosRecuperados[i*3 + 1] = Original[1];
-        DatosRecuperados[i*3 + 2] = Original[2];
+    if (!IM) {
+        delete[] Io;
+        return 1;
     }
 
-    //Liberamos la memoria
-    delete[] DatosEnmascarados;
-    delete[] DatosRecuperados;
+    //Cargar la mascara (M) asumiendo que es un archivo bmp de 10 * 10
+    int Width_M, Height_M;
+    unsigned char *M = CargarPixels("M.bmp", Width_M, Height_M);
+    if (!M) {
+        delete[] Io;
+        delete[] IM;
+        return 1;
+    }
+
+    //Revertir último XOR (P3.bmp = XOR(IR3, IM))
+    AplicarXOR(Io, IM, Width * Height * 3);
 
     return 0;
 }
 
-//Función para deshacer el XOR
-void DesHacerXOR(const unsigned char BloqueEnmascarado[3], const unsigned char Clave[3], unsigned char Original[3]) {
-    for (int i = 0; i < 3; i++) {
-        //Al aplicar XOR 2 veces a la misma clave se obtiene el valor original
-        Original[i] = BloqueEnmascarado[i] ^ Clave[i];
+//Función para aplicar el XOR entre dos imagenes haciendo la opercaion reversible
+void AplicarXOR(unsigned char* imagen, unsigned char* IM, int size) {
+    for (int i = 0; i < size; ++i) {
+        imagen[i] ^= IM[i % size]; // se usa módulo si IM es más pequeña
     }
 }
 
@@ -87,4 +79,38 @@ unsigned int *CargarSemilla(const char *NombreArchivo, int &Semilla, int &N_Pixe
 
     archivo.close();
     return RGB;
+}
+
+unsigned char* CargarPixels(QString input, int &width, int &height){
+    // Cargar la imagen BMP desde el archivo especificado
+    QImage imagen(input);
+
+    // Verifica si la imagen fue cargada correctamente
+    if (imagen.isNull()) {
+        cout << "Error: No se pudo cargar la imagen BMP." << endl;
+        return nullptr; // Retorna un puntero nulo si la carga falló
+    }
+
+    // Convierte la imagen al formato RGB888 (3 canales de 8 bits sin transparencia)
+    imagen = imagen.convertToFormat(QImage::Format_RGB888);
+
+    // Obtiene el ancho y el alto de la imagen cargada
+    width = imagen.width();
+    height = imagen.height();
+
+    // Calcula el tamaño total de datos (3 bytes por píxel: R, G, B)
+    int dataSize = width * height * 3;
+
+    // Reserva memoria dinámica para almacenar los valores RGB de cada píxel
+    unsigned char* pixelData = new unsigned char[dataSize];
+
+    // Copia cada línea de píxeles de la imagen Qt a nuestro arreglo lineal
+    for (int y = 0; y < height; ++y) {
+        const uchar* srcLine = imagen.scanLine(y);              // Línea original de la imagen con posible padding
+        unsigned char* dstLine = pixelData + y * width * 3;     // Línea destino en el arreglo lineal sin padding
+        memcpy(dstLine, srcLine, width * 3);                    // Copia los píxeles RGB de esa línea (sin padding)
+    }
+
+    // Retorna el puntero al arreglo de datos de píxeles cargado en memoria
+    return pixelData;
 }
