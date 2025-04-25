@@ -10,7 +10,6 @@ void RotarBitsIzquierda(unsigned char *Datos, int Size, int Bits);
 void RotarBitsDerecha(unsigned char *Datos, int Size, int Bits);
 void DesplazarBitsIzquierda(unsigned char *Datos, int Size, int Bits);
 void DesplazarBitsDerecha(unsigned char *Datos, int Size, int Bits);
-void RestarMascara(unsigned char *Imagen, unsigned char *M, int offset, int MascaraSize, int width, int height, int Width_M, int Height_M);
 unsigned int *CargarSemilla(const char *NombreArchivo, int &Semilla, int &N_Pixeles);
 unsigned char *CargarPixels(QString input, int &width, int &height);
 bool exportImage(unsigned char* pixelData, int width,int height, QString archivoSalida);
@@ -18,23 +17,26 @@ bool CompararImagenes(unsigned char* pixelData1, int width1, int height1, unsign
 
 int main()
 {
-    //Cargar la imagen transformada final (P3)
+    //Cargar la imagen transformada final (I_D) imagen de distorción
     int Width, Height;
-    unsigned char *Io_F = CargarPixels("P3.bmp", Width, Height);
-    if (!Io) return 1;
+    unsigned char *Io_F = CargarPixels("I_D.bmp", Width, Height);
+    if (!Io_F) return 1;
 
-    //Cargar la imagen de distorción (IM)
+    //Cargar la imagen de distorción (I_M) usada para distorcionar la imagen
     int Width_IM, Height_IM;
     unsigned char *IM = CargarPixels("I_M.bmp", Width_IM, Height_IM);
 
+    //liberar memoria en caso de que (I_M) no cargue correctamente
     if (!IM) {
         delete[] Io_F;
         return 1;
     }
 
-    //Cargar la mascara (M)
+    //Cargar la mascara (M) para validar que las operaciones a nivel de bits sean correctas
     int Width_M, Height_M;
     unsigned char *M = CargarPixels("M.bmp", Width_M, Height_M);
+
+    //liberar memoria en caso de que (M) no cargue correctamente
     if (!M) {
         delete[] Io_F;
         delete[] IM;
@@ -44,38 +46,100 @@ int main()
     //Revertir último XOR (P3.bmp = XOR(IR3, IM))
     AplicarXOR(Io_F, IM, Width * Height * 3);
 
-    //Revertir rotación de 3 bits a la Derecha
-    RotarBitsIzquierda(Io_F, Width * Height * 3, 3);
-
-    //Cargar y aplicar enmascaramiento M2.txt
+    //Cargar y validar enmascaramiento con el archivo M2.txt
+    bool Iguales = true;
     int Semilla2, N_Pixeles2;
     unsigned int *DatosM2 = CargarSemilla("M2.txt", Semilla2, N_Pixeles2);
     if (DatosM2) {
-        //Acá se aplica la formula dada
-        RestarMascara(Io_F, M, Semilla2, N_Pixeles2 * 3, Width, Height, Width_M, Height_M);
+        //Aplicar la formula dada para validar los datos
+        for (int i = 0; i < N_Pixeles2 * 3; i++) {
+            int SumaM2 = int(Io_F[Semilla2 + i]) + int(M[i]);
+
+            //verificar que cada suma sea correcta
+            if (SumaM2 != DatosM2[i]) {
+                cout << "Los datos no coinciden, se esperaba: " << int(DatosM2[i]) << " y se obtuvo: " << SumaM2 << endl;
+                Iguales = false;
+                break;
+            }
+        }
+
         delete[] DatosM2;
+    }
+
+    if (Iguales) {
+        cout << "La aplicación del XOR fue exitosa." << endl;
+    } else {
+        cout << "La aplicación del XOR fue erronea." << endl;
+        return 1;
+    }
+
+    //Revertir rotación de 3 bits a la Derecha
+    RotarBitsIzquierda(Io_F, Width * Height * 3, 3);
+
+    //Cargar y validar enmascaramiento con el archivo M1.txt
+    Iguales = true;
+    int Semilla1, N_Pixeles1;
+    unsigned int *DatosM1 = CargarSemilla("M1.txt", Semilla1, N_Pixeles1);
+    if (DatosM1) {
+        //Aplicar la formula dada para validar los datos
+        for (int i = 0; i < N_Pixeles1 * 3; i++) {
+            int SumaM1 = int(Io_F[Semilla1 + i]) + int(M[i]);
+
+            //verificar que cada suma sea correcta
+            if (SumaM1 != DatosM1[i]) {
+                cout << "Los datos no coinciden, se esperaba: " << int(DatosM1[i]) << " y se obtuvo: " << SumaM1 << endl;
+                Iguales = false;
+                break;
+            }
+        }
+
+        delete[] DatosM1;
+    }
+
+    if (Iguales) {
+        cout << "La aplicación de la Rotación de Bits fue exitosa." << endl;
+    } else {
+        cout << "La aplicación de la Rotación de Bits fue erronea." << endl;
+        return 1;
     }
 
     //Revertir primer XOR (P1.bmp = XOR(Io_original, IM))
     AplicarXOR(Io_F, IM, Width * Height * 3);
 
-    // Cargar y aplicar enmascaramiento M1.txt
-    int Semilla1, N_Pixeles1;
-    unsigned int *DatosM1 = CargarSemilla("M1.txt", Semilla1, N_Pixeles1);
-    if (DatosM1) {
-        //Acá se aplica la formula dada
-        RestarMascara(Io_F, M, Semilla1, N_Pixeles1 * 3, Width, Height, Width_M, Height_M);
-        delete[] DatosM1;
+    Iguales = true;
+    int SemillaMO, N_PixelesMO;
+    unsigned int *DatosMO = CargarSemilla("M0.txt", SemillaMO, N_PixelesMO);
+    if (DatosMO) {
+        //Aplicar la formula dada para validar los datos
+        for (int i = 0; i < N_PixelesMO * 3; i++) {
+            int SumaMO = int(Io_F[SemillaMO + i]) + int(M[i]);
+
+            //verificar que cada suma sea correcta
+            if (SumaMO != DatosMO[i]) {
+                cout << "Los datos no coinciden, se esperaba: " << int(DatosMO[i]) << " y se obtuvo: " << SumaMO << endl;
+                Iguales = false;
+                break;
+            }
+        }
+
+        delete[] DatosMO;
+    }
+
+    if (Iguales) {
+        cout << "La aplicación del XOR fue exitosa." << endl;
+    } else {
+        cout << "La aplicación del XOR fue erronea." << endl;
+        return 1;
     }
 
     // Guardar imagen recuperada
     exportImage(Io_F, Width, Height, "Io_recuperada.bmp");
 
-    //Comparar Imagenes
+    //Comparar si la imagen que se recupero es igual a la imagen Original
     int WidthRef, HeightRef;
     unsigned char *ImagenRef = CargarPixels("I_O.bmp", WidthRef, HeightRef);
     if (ImagenRef) {
-        bool coinciden = CompararImagenes(Io, Width, Height, ImagenRef, WidthRef, HeightRef);
+        bool coinciden = CompararImagenes(Io_F, Width, Height, ImagenRef, WidthRef, HeightRef);
         if (coinciden) {
             cout << "Proceso exitoso." << endl;
         } else {
@@ -85,7 +149,7 @@ int main()
     }
 
     // Liberar memoria
-    delete[] Io;
+    delete[] Io_F;
     delete[] IM;
     delete[] M;
 
@@ -137,23 +201,6 @@ void DesplazarBitsDerecha(unsigned char *Datos, int Size, int Bits) {
     cout << "Desplazamiento de bits a la derecha completado." << endl;
 }
 
-void RestarMascara(unsigned char *Imagen, unsigned char *M, int offset, int MascaraSize, int width, int height, int Width_M, int Height_M) {
-    int mascara_width = Width_M;
-    int mascara_height = Height_M;
-
-    for (int i = 0; i < MascaraSize; ++i) {
-        int pos_imagen = (offset + i) % (width * height * 3); // Posición en la imagen transformada
-
-        // Calcular la posición correspondiente en la máscara (módulo el tamaño de la máscara)
-        int pos_mascara = i % (mascara_width * mascara_height * 3);
-
-        // Restar el valor de la máscara para recuperar el píxel original
-        Imagen[pos_imagen] = Imagen[pos_imagen] - M[pos_mascara];
-    }
-
-    cout << "Proceso de enmascaramiento completado." << endl;
-}
-
 unsigned int *CargarSemilla(const char *NombreArchivo, int &Semilla, int &N_Pixeles) {
 
     //Abrimos el archivo y verificamos que el archivo abrio correctamente
@@ -184,7 +231,7 @@ unsigned int *CargarSemilla(const char *NombreArchivo, int &Semilla, int &N_Pixe
         RGB[i] = R;
         RGB[i+1] = G;
         RGB[i+2] = B;
-        cout << "Pixel " << i / 3 << "(" << R  << "," << G << "," << B << ")" << endl;
+        cout << "Pixel " << i / 3 << ": (" << R  << "," << G << "," << B << ")" << endl;
     }
 
     archivo.close();
@@ -261,6 +308,7 @@ bool exportImage(unsigned char* pixelData, int width,int height, QString archivo
 
 }
 
+//Funcion para verificar que las imagenes sean iguales
 bool CompararImagenes(unsigned char* pixelData1, int width1, int height1, unsigned char* pixelData2, int width2, int height2) {
     // Verificar si las dimensiones coinciden
     if (width1 != width2 || height1 != height2) {
@@ -268,7 +316,7 @@ bool CompararImagenes(unsigned char* pixelData1, int width1, int height1, unsign
         return false;
     }
 
-    // Verificar cada pixel
+    // Verificar que cada pixel sea igual
     int dataSize = width1 * height1 * 3;
     for (int i = 0; i < dataSize; ++i) {
         if (pixelData1[i] != pixelData2[i]) {
